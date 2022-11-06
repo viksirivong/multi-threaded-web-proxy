@@ -1,80 +1,133 @@
 from socket import *
 import sys
+import os
+import time
+from _thread import *
+import threading
+
+IP = "127.0.0.1"
+PROXY_PORT = 80
+ORIGIN_PORT = 90
+BUFFER_SIZE = 2048
+SOCKETS = []
+FILES = { "HelloWorld.html":"Thu, 6 Oct 2022 09:23:18" }
+STATUS_200 = "HTTP/1.1 200 OK"
+STATUS_304 = "HTTP/1.1 304 Not Modified"
+STATUS_404 = "HTTP/1.1 404 Not Found"
 
 def main():
-    if len(sys.argv) <= 1:
-        print('Usage: "python proxy_server.py server_ip"\n[server_ip : It is the IP Address of Proxy Server')
-        sys.exit(2)
-
-    # Create a server socket, bind it to a port and start listening
-    tcpSerSOck = socket(AF_INET, SOCK_STREAM)
-    #Fill in start
-
-    #Fill in end
-    while 1:
-        # Start receiving data from the client
-        print('Ready to serve...')
-        tcpCliSock, addr = tcpSerSock.accept()
-        print('Received a connection from:', addr)
-        message = #Fill in
-        print(message)
-        #Extract the filename from the given message
-        print(message.split()[1])
-        filename = message.split()[1].partition("/")[2]
-        print(filename)
-        fileExist = "false"
-        fileToUse = "/" + filename
-        print(fileToUse)
-        try:
-            #Check whether the file exist in the cache
-            f = open(fileToUse[1:], "r")
-            outputdata = f.readlines()
-            fileExist = "true"
-            #ProxyServer finds a cache hit and generates a response message
-            tcpCliSock.send("HTTP/1.0 200 OK\r\n")
-            tcpCliSock.send("Content-Type:text/html\r\n")
-            #Fill in start
-            
-            #Fill in end
-                print('Read from cache')
-        #Error handling for file not found in cache
-        except IOError:
-            if fileExist == "false":
-                #Create a socket on the proxyserver
-                c = #Fill in
-                hostn = filename.replace("www.", "", 1)
-                print(hostn)
-                try:
-                    #Connect to the socket to port 80
-                    #Fill in start
-
-                    #Fill in end
-                    #Create a temporary file on this socket and ask port 80 for the file requested by the client
-                    fileobj = c.makefile('r', 0)
-                    fileobj.write("GET     " + "http://" + filename + "HTTP/1.0\n\n")
-                    #Read the response into buffer
-                    #Fill in start
-                    
-                    #Fill in end
-                    #Create a new file in the cache for the requested file
-                    #Also send the response in the buffer to client socket and the corresponding file in the cache
-                    tmpFile = open("./" + filename, "wb")
-                    #Fill in start
-                    
-                    #Fill in end
-                except:
-                    print("Illegal request")
+    # Create origin/proxy server sockets
+    proxySocket = createSocket()    
+    originSocket = createSocket()
+    # Bind proxy socket and set to listen
+    bindSocket(proxySocket, '', PROXY_PORT)
+    # Accept requests from client
+    while True:
+        print("The proxy server is ready to receive...")
+        clientSocket, clientAddr = proxySocket.accept()
+        SOCKETS.append(clientSocket)
+        msg = clientSocket.recv(BUFFER_SIZE).decode()
+        clientReqMsg = msg.split()
+        # Maybe check instead of assuming these values?
+        hostname = clientReqMsg[4]
+        pathname = clientReqMsg[1]
+        connectSocket(originSocket, IP, ORIGIN_PORT)
+        originSocket.send(("GET " + pathname + " HTTP/1.1\r\n").encode())
+        originSocket.send(("Host: " + hostname + "\r\n").encode())
+        # File already exists
+        if os.path.exists(pathname[1:]):
+            print("if file exists")
+            originSocket.send(("If-modified-since: " + FILES[pathname[1:]] + "\r\n").encode())
+        originSocket.send("\r\n".encode())
+        originSocket.shutdown(SHUT_WR)
+        msg = receiveMsg(originSocket)
+        responseMsg = msg.split("\r\n")
+        # *****************************************************
+        # Error 404 message received
+        if responseMsg[0] == STATUS_404:
+            clientSocket.send( (STATUS_404 + "\r\n\r\n").encode() )
+        # Status 200 or 304 received
+        else:
+            clientSocket.send( (STATUS_200 + "\r\n\r\n").encode() )
+            # Status code 304
+            if responseMsg[0] == STATUS_304:
+                file = open(pathname[1:], "r")
+                outputdata = file.readlines()
+                sendToClient(clientSocket, outputdata)
+            # Status code 200
             else:
-                #HTTP response message for file not found
-                #Fill in start
-                
-                #Fill in end
-        #Close the client and the server sockets
-        tcpCliSock.close()
-    #Fill in start
+                file = open(pathname[1:], "w")
+                outputdata = msg.split("\r\n\r\n")[1]
+                sendToClient(clientSocket, outputdata)
+                file.writelines(outputdata)
+                lastModified = responseMsg[1].split()
+                date = ''
+                for i in range(1, len(lastModified)):
+                    date = date + lastModified[i]
+                FILES.update({pathname[1:]:date})
+            clientSocket.send("\r\n".encode())
+        # *******************************************************
+
+        clientSocket.shutdown(SHUT_RDWR)
+        closeSocket(clientSocket)
+        originSocket.shutdown(SHUT_RDWR)
+        closeSocket(originSocket)
+
+def sendToClient(soc, data):
+    for i in range(0, len(data)):
+        soc.send(data[i].encode())
         
-    #Fill in end
+def receiveMsg(soc):
+    msg = ''
+    while True:
+        data = soc.recv(BUFFER_SIZE).decode()
+        if not data: break
+        msg = msg + data
+    return msg
 
+def acquireFileDate(pathname):
+    data = time.ctime(os.path.getmtime(pathname[1:])).split()
+    return data[0], data[1], data[2], data[3], data[4]
 
+def connectSocket(soc, ip, port):
+    try:
+        soc.connect( (ip, port) )
+    except:
+        print("Failed to connect to socket. Program terminating.")
+        closeAllSockets()
+        sys.exit()
+        
+def bindSocket(soc, ip, port):
+    try:
+        soc.bind( (ip, port) )
+        soc.listen(1)
+    except:
+        print("Failed to bind socket. Program terminating.")
+        closeAllSockets()
+        sys.exit()
+        
+def createSocket():
+    try:
+        tempSocket = socket(AF_INET, SOCK_STREAM)
+        SOCKETS.append(tempSocket)
+        print("Socket initialized.")
+    except:
+        print("Failed to initialize socket. Program terminated.")
+        closeAllSockets()
+        sys.exit()
+    return tempSocket
+
+def closeAllSockets():
+    for soc in SOCKETS:
+        print("Closing:", soc)
+        soc.close()
+    SOCKETS.clear()
+    print("Finished closing all the sockets.")
+
+def closeSocket(soc):
+    print("Closing:", soc)
+    soc.close()
+    SOCKETS.remove(soc)
+    
 if __name__ == "__main__":
     main()
