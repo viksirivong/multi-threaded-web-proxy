@@ -5,123 +5,104 @@ import time
 import datetime
 from _thread import *
 import threading
-
 # helper.py functions used for all three py files
 sys.path.append("..")
 import helper
 
-IP = "127.0.0.1"
 PROXY_PORT = 80
 ORIGIN_PORT = 90
+ORIGIN_IP = "127.0.0.1"
 BUFFER_SIZE = 2048
-SOCKETS = []
+THREAD_LOCK = threading.Lock()
 
 def main():
     # Create origin server socket
-    originSocket = createSocket()
+    originSocket = helper.createSocket("origin")
     # Bind origin socket and set to listen
-    bindSocket(originSocket, '', ORIGIN_PORT)
+    helper.bindSocket(originSocket, ORIGIN_PORT)
     # Accept requests from proxy server
     while True:
-        print("Ready to receive")
-        connectionSocket, addr = originSocket.accept()
-        SOCKETS.append(connectionSocket)
-        print("Connection accepted:", addr)
-        requestMsg = receiveMsg(connectionSocket)
-        pathname = requestMsg[1]
-        try:
+        time.sleep(1)
+        THREAD_LOCK.acquire()
+        print("Origin server is ready to receive...")
+        THREAD_LOCK.release()
+        proxySocket, addr = originSocket.accept()
+        t = threading.Thread(target=originThreading, args=((proxySocket,)) )
+        t.start()
+    t.join()
+
+def originThreading(proxySocket):
+    try:
+        condGetMsg = proxySocket.recv(BUFFER_SIZE).decode()
+        THREAD_LOCK.acquire()
+        condGetMsg += helper.receiveMsg(proxySocket)
+        #condGetMsg = condGetMsg.split()
+        pathname = condGetMsg[1]
+        thread_num = threading.current_thread().name.split()[0]
+        print(f"\n{thread_num} created:")
+        print("Origin server received conditional GET message from proxy server.")
+        THREAD_LOCK.release()
+        condGetMsg = condGetMsg.split()
+        pathname = condGetMsg[1]
+
+        # File found by origin server
+        if os.path.exists(pathname[1:]):
             file = open(pathname[1:], "r")
-            # File found by proxy server (if-modified-since)
-            if len(requestMsg) > 5:
-                print("Proxy found file")
-                originFileDatetime = acquireDatetime(pathname)
-                proxyFileDatetime = convertToDatetime(requestMsg)
+            # conditional GET message has a if-modified-since header line
+            if len(condGetMsg) > 5:
+                originFileDatetime = helper.acquireDatetime(pathname)
+                proxyFileDatetime = helper.convertToDatetime(condGetMsg)
+                THREAD_LOCK.acquire()
+                print(f"\n{thread_num} resumed:")
                 if proxyFileDatetime >= originFileDatetime:
                     print("Proxy server file is up to date.")
-                    connectionSocket.send("HTTP/1.1 304 Not Modified\r\n".encode())
-                    connectionSocket.send("\r\n".encode())
-                else: # proxyFileDateTime < originFileDateTime
+                    proxySocket.send("HTTP/1.1 304 Not Modified\r\n".encode())
+                    proxySocket.send("\r\n".encode())
+                    proxySocket.shutdown(SHUT_WR)
+                    print("Status code 304 sent.")
+                # proxyFileDatetime < originFileDatetime
+                else:
                     print("Origin server file is newer.")
-                    sendUpdatedFile(pathname, file, connectionSocket)                    
-            # File not found by proxy server
+                    helper.sendUpdatedFile(pathname, file, proxySocket)
+                    proxySocket.shutdown(SHUT_WR)
+                    print("Sent status code 200 with updated file data to proxy server.")
+                THREAD_LOCK.release()
+            # File not found by origin server
             else:
-                print("Proxy didn't find file")
-                sendUpdatedFile(pathname, file, connectionSocket)
-        except IOError:
-            print("Error 404 File Not Found.")
-            connectionSocket.send("HTTP/1.1 404 Not Found\r\n".encode())
-            connectionSocket.send("\r\n".encode())
-        connectionSocket.shutdown(SHUT_WR)
-        closeSocket(connectionSocket)
-    originSocket.shutdown(SHUT_RDWR)
-    closeAllSockets()
-
-def sendUpdatedFile(pathname, file, soc):
-    dayOfWeek, month, day, time, year = acquireFileDate(pathname)
-    outputdata = file.readlines()
-    soc.send("HTTP/1.1 200 OK\r\n".encode())
-    soc.send( ("Last-modified: " + dayOfWeek + ", " + day + " " + month + " " + year + " " + " " + time + "\r\n").encode() )
-    soc.send("\r\n".encode())
-    for i in range(0, len(outputdata)):
-        soc.send(outputdata[i].encode())
-    soc.send("\r\n".encode())
-
-def acquireFileDate(pathname):
-    data = time.ctime(os.path.getmtime(pathname[1:])).split()
-    return data[0], data[1], data[2], data[3], data[4]
-
-def convertToDatetime(msg):
-    fileTime = msg[6][0:3]
-    for i in range(7, len(msg)):
-        fileTime = fileTime + " " + msg[i]
-    fileDatetime = datetime.datetime.strptime(fileTime, "%a %d %b %Y %H:%M:%S")
-    return fileDatetime
-
-# Acquire datetime object for pathname
-def acquireDatetime(pathname):
-    fileTime = time.ctime(os.path.getmtime(pathname[1:]))
-    fileDatetime = datetime.datetime.strptime(fileTime, "%a %b %d %H:%M:%S %Y")
-    return fileDatetime
-
-def receiveMsg(soc):
-    msg = ''
-    while True:
-        data = soc.recv(BUFFER_SIZE).decode()
-        if not data: break
-        msg = msg + data
-    return msg.split()
-
-def bindSocket(soc, ip, port):
-    try:
-        soc.bind( (ip, port) )
-        soc.listen(1)
+                THREAD_LOCK.acquire()
+                print(f"\n{thread_num} resumed:")
+                print("Origin server file is newer.")
+                helper.sendUpdatedFile(pathname, file, proxySocket)
+                proxySocket.shutdown(SHUT_WR)
+                print("Sent status code 200 with updated file data to proxy server.")
+                THREAD_LOCK.release()
+        # File not found by origin server
+        else:
+            THREAD_LOCK.acquire()
+            print(f"\n{thread_num} resumed:")
+            print("File Not Found in origin server.")
+            proxySocket.send("HTTP/1.1 404 Not Found\r\n".encode())
+            proxySocket.send("\r\n".encode())
+            print("Status code 404 sent.")
+            proxySocket.shutdown(SHUT_WR)
+            #helper.closeSocket(proxySocket)
+            #print(f"{thread_num} finished")
+            THREAD_LOCK.release()
+        THREAD_LOCK.acquire()
+        print(f"\n{thread_num} resumed:")
+        proxySocket.shutdown(SHUT_RDWR)
+        print("Attempting to close proxy socket.")
+        helper.closeSocket(proxySocket)
+        print(f"{thread_num} finished.")
+        THREAD_LOCK.release()
     except:
-        print("Failed to bind socket. Program terminating.")
-        closeAllSockets()
-        sys.exit()
-        
-def createSocket():
-    try:
-        tempSocket = socket(AF_INET, SOCK_STREAM)
-        SOCKETS.append(tempSocket)
-        print("Socket initialized.")
-    except:
-        print("Failed to initialize socket. Program terminated.")
-        closeAllSockets()
-        sys.exit()
-    return tempSocket
-
-def closeAllSockets():
-    for soc in SOCKETS:
-        print("Closing:", soc)
-        soc.close()
-    SOCKETS.clear()
-    print("Finished closing all the sockets.")
-
-def closeSocket(soc):
-    print("Closing:", soc)
-    soc.close()
-    SOCKETS.remove(soc)
+        THREAD_LOCK.acquire()
+        print(f"\n{thread_num}: Socket connection interrupted.")
+        print("Terminating thread.")
+        print("Attempting to close proxy socket.")
+        helper.closeSocket(proxySocket)
+        THREAD_LOCK.release()
+    
     
 if __name__ == "__main__":
     main()

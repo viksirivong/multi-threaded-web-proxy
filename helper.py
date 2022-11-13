@@ -3,8 +3,10 @@ import sys
 import time
 import os
 import datetime
+import threading
 
 BUFFER_SIZE = 2048
+THREAD_LOCK = threading.Lock()
 
 def createSocket(str):
     """
@@ -20,30 +22,11 @@ def createSocket(str):
     try:
         tempSocket = socket(AF_INET, SOCK_STREAM)
         print(f"TCP IPv4 socket created for {str}.")
-        # sockets.append(tempSocket)
         return tempSocket
     except:
         print(f"Failed to create TCP IPv4 socket for {str}.")
         print("Program terminated.")
-        # closeAllSockets(sockets)
         sys.exit()
-
-def closeAllSockets(sockets):
-    """
-    Closes all currently open sockets.
-
-    Parameters:
-    sockets (list): List of created sockets.
-    """
-    print("Closing all sockets.\n")
-    for soc in sockets:
-        try:
-            soc.close()
-            print("Closed:", soc, "\n")
-        except:
-            print("Failed to close:", soc, "\n")
-    sockets.clear()
-    print("Finished closing all the sockets.\n")
 
 def closeSocket(soc):
     """
@@ -55,10 +38,9 @@ def closeSocket(soc):
     """
     try:
         soc.close()
-        print("Closed:", soc, "\n")
-        #sockets.remove(soc)
+        print("Closed:", soc)
     except:
-        print("Failed to close:", soc, "\n")
+        print("Failed to close:", soc)
 
 def connectSocket(soc, ip, port):
     """
@@ -77,28 +59,6 @@ def connectSocket(soc, ip, port):
     except:
         print(f"Failed to initiate connection to {ip}:{port}.")
         return -1
-    
-##def connectSocket(soc, ip, port):
-##    """
-##    Initiate connection to (ip, port).
-##    
-##    Parameters:
-##    soc (socket): Socket initiating the connection.
-##    ip (string): IP address to connect to.
-##    port (int): Port number to connect to.
-##    """
-##    attempts = 0
-##    maxAttempts = 5
-##    #print("Attempting to connect to socket.")
-##    while attempts < maxAttempts:
-##        try:
-##            soc.connect( (ip, port) )
-##            print(f"Connected to: {ip}:{port}")
-##            return
-##        except:
-##            attempts += 1
-##    print(f"Failed to initiate connection to {ip}:{port}.")
-##     raise
 
 def bindSocket(soc, port):
     """
@@ -115,7 +75,6 @@ def bindSocket(soc, port):
         print("Port number is binded and the socket listening.")
     except:
         print("Failed to bind port number. Program terminating.")
-        #closeAllSockets(sockets)
         sys.exit()
 
 def receiveMsg(soc):
@@ -173,8 +132,8 @@ def buildCondGET(pathname, hostname):
     msg = "GET " + pathname + " HTTP/1.1\r\n"
     msg += "Host: " + hostname + "\r\n"
     if os.path.exists(pathname[1:]):
-        dt = acquireDatetime(pathname)
-        msgs += "If-modified-since: " + dt + "\r\n"
+        dayOfWeek, month, day, time, year = acquireFileDate(pathname)
+        msg += "If-modified-since: " + dayOfWeek + ", " + day + " " + month + " " + year + " " + time + "\r\n"
     return msg
 
 def acquireDatetime(pathname):
@@ -185,3 +144,30 @@ def acquireDatetime(pathname):
 def sendData(soc, data):
     for i in range(0, len(data)):
         soc.send(data[i].encode())
+
+def sendUpdatedFile(pathname, file, soc):
+    print("enter sendUpdatedFile()")
+    dayOfWeek, month, day, time, year = acquireFileDate(pathname)
+    outputdata = file.readlines()
+    print(outputdata)
+    soc.send("HTTP/1.1 200 OK\r\n".encode())
+    soc.send( ("Last-modified: " + dayOfWeek + ", " + day + " " + month + " " + year + " " + " " + time + "\r\n").encode() )
+    soc.send("\r\n".encode())
+    for i in range(0, len(outputdata)):
+        soc.send(outputdata[i].encode())
+    soc.send("\r\n".encode())
+    print("exit sendUpdatedFile()")
+
+def acquireFileDate(pathname):
+    """
+    [Day of the week, month, day, time, year]
+    """
+    data = time.ctime(os.path.getmtime(pathname[1:])).split()
+    return data[0], data[1], data[2], data[3], data[4]
+
+def convertToDatetime(msg):
+    fileTime = msg[6][0:3]
+    for i in range(7, len(msg)):
+        fileTime = fileTime + " " + msg[i]
+    fileDatetime = datetime.datetime.strptime(fileTime, "%a %d %b %Y %H:%M:%S")
+    return fileDatetime
