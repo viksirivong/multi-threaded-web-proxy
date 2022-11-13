@@ -6,6 +6,10 @@ import datetime
 from _thread import *
 import threading
 
+# helper.py functions used for all three py files
+sys.path.append("..")
+import helper
+
 IP = "127.0.0.1"
 PROXY_PORT = 80
 ORIGIN_PORT = 90
