@@ -1,3 +1,10 @@
+"""
+Group: Ricardo Garcia, Thongsavik Sirivong, and Renato Safra
+Project: Multi-threaded web proxy server
+Files: client.py, proxy_server.py, origin_server.py, and helper.py
+Date: 11/13/22
+Description: This program incorporates a multi-threaded proxy server.
+"""
 from socket import *
 import sys
 import os
@@ -19,11 +26,12 @@ STATUS_404 = "HTTP/1.1 404 Not Found"
 THREAD_LOCK = threading.Lock()
 
 def main():
-    #Create proxy server sockets
+    # Create, bind, and set to listen (proxy)
     proxySocket = helper.createSocket("proxy")
-    # Bind proxy socket and set to listen
     helper.bindSocket(proxySocket, PROXY_PORT)
+    # Accept requests from client server
     while True:
+        time.sleep(1)
         THREAD_LOCK.acquire()
         print("Proxy server is ready to receive...")
         THREAD_LOCK.release()
@@ -33,38 +41,49 @@ def main():
     t.join()
 
 def proxyThreading(clientSocket):
+    """
+    Handles the threading of the communication between the client and proxy server
+    & the proxy and origin server.
+
+    Parameters:
+    clientSocket (socket): Socket connection accepted from client. 
+    """
     try:
         # Wait for request message from client
         reqMsg = clientSocket.recv(BUFFER_SIZE).decode()
-        # Lock thread after receiving data
         THREAD_LOCK.acquire()
         # Find current working thread number
         thread_num = threading.current_thread().name.split()[0]
         print(f"\n{thread_num} created:")
         print("Proxy server received request message from client.")
+        # Establish TCP connection with origin server
         originSocket = helper.createSocket("origin")
         THREAD_LOCK.release()
         # Parse request message
         reqMsg = reqMsg.split()
         hostname = reqMsg[4]
         pathname = reqMsg[1]
-
+        
         # Send conditional GET message to origin server
         THREAD_LOCK.acquire()
         print(f"\n{thread_num} resumed:")
         print("Initiating connection with origin server.")
+        # Connect to origin ip:port
         errCode = helper.connectSocket(originSocket, ORIGIN_IP, ORIGIN_PORT)
+        # Failed to connect to origin
         if errCode == -1:
             THREAD_LOCK.release()
             raise exception
+        # Build conditional GET message
         condGetMsg = helper.buildCondGET(pathname, hostname)
         print("Conditional GET message built.")
+        # send message to origin server
         originSocket.send(condGetMsg.encode())
         originSocket.send("\r\n".encode())
         print("Sent conditional GET message to origin server.")
         originSocket.shutdown(SHUT_WR)
         THREAD_LOCK.release()
-
+        
         # Receive response message from origin server
         msg = originSocket.recv(BUFFER_SIZE).decode()
         THREAD_LOCK.acquire()
@@ -72,7 +91,6 @@ def proxyThreading(clientSocket):
         print(f"\n{thread_num} resumed:")
         print("Received response message from origin server.")
         resMsg = msg.split("\r\n")
-        print(resMsg)
         # Status code 404 received
         if resMsg[0] == STATUS_404:
             clientSocket.send( (STATUS_404 + "\r\n").encode() )
@@ -87,24 +105,28 @@ def proxyThreading(clientSocket):
                 file = open(pathname[1:], "r")
                 outputdata = file.readlines()
                 helper.sendData(clientSocket, outputdata)
-                print(f"{pathname[1:]} up to date.")
+                print(f"{pathname[1:]} is up to date.")
             # Status code 200 (proxy is out of date)
             else:
+                # Update file with information sent from origin server
                 file = open(pathname[1:], "w")
                 outputdata = msg.split("\r\n\r\n")[1]
                 file.writelines(outputdata)
                 print(f"{pathname[1:]} cache version updated.")
+                # Send updated file information to client
                 file = open(pathname[1:], "r")
                 outputdata = file.readlines()
                 helper.sendData(clientSocket, outputdata)
             clientSocket.send("\r\n".encode())
             print("Response message sent to client.")
+        # Close open socket connections
         clientSocket.shutdown(SHUT_RDWR)
         print("Attempting to close client socket.")
         helper.closeSocket(clientSocket)
         print(f"{thread_num} finished.")
         THREAD_LOCK.release()
     except:
+        # Error with socket connection. Close thread.
         THREAD_LOCK.acquire()
         print(f"\n{thread_num}: Socket connection interrupted.\nTerminating thread.")
         print("Attempting to close client socket.")

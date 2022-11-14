@@ -1,3 +1,10 @@
+"""
+Group: Ricardo Garcia, Thongsavik Sirivong, and Renato Safra
+Project: Multi-threaded web proxy server
+Files: client.py, proxy_server.py, origin_server.py, and helper.py
+Date: 11/13/22
+Description: All the functions used in the client, proxy, and origin programs. 
+"""
 from socket import *
 import sys
 import time
@@ -8,23 +15,20 @@ import threading
 BUFFER_SIZE = 2048
 THREAD_LOCK = threading.Lock()
 
-def createSocket(str):
+def createSocket(socName):
     """
     Create a TCP socket (AF_INET, SOCK_STREAM).
     If it fails to create a socket, then the program will terminate.
 
     Parameters:
-    sockets (list): List of created sockets.
-
-    Returns:
-    tempSocket (socket): Created socket.
+    socName (string): Name of socket created.
     """
     try:
         tempSocket = socket(AF_INET, SOCK_STREAM)
-        print(f"TCP IPv4 socket created for {str}.")
+        print(f"TCP IPv4 socket created for {socName}.")
         return tempSocket
     except:
-        print(f"Failed to create TCP IPv4 socket for {str}.")
+        print(f"Failed to create TCP IPv4 socket for {socName}.")
         print("Program terminated.")
         sys.exit()
 
@@ -33,8 +37,7 @@ def closeSocket(soc):
     Close the socket passed as an argument.
 
     Parameters:
-    soc (socket): Socket to be closed
-    sockets (list): List of created sockets.
+    soc (socket): Socket to be closed.
     """
     try:
         soc.close()
@@ -50,6 +53,9 @@ def connectSocket(soc, ip, port):
     soc (socket): Socket initiating the connection.
     ip (string): IP address to connect to.
     port (int): Port number to connect to.
+
+    Returns:
+    int (int): Error code. 
     """
 
     try:
@@ -63,11 +69,11 @@ def connectSocket(soc, ip, port):
 def bindSocket(soc, port):
     """
     Bind the port number to the socket and set it to listen.
+    If it fails, then the program will terminate.
 
     Paramaeters:
     soc (socket): Socket to listen.
     port (int): Port number to bind.
-    sockets (list): List of created sockets.
     """
     try:
         soc.bind( ('', port) )
@@ -80,7 +86,7 @@ def bindSocket(soc, port):
 def receiveMsg(soc):
     """
     Receives encoded message and concatonates all the data.
-    Once 0 bytes are received, the message is returned.
+    Once zero bytes are received, the message is returned.
 
     Parameters:
     soc (socket): Socket that data will be received from.
@@ -94,18 +100,6 @@ def receiveMsg(soc):
         if not data: break
         msg += data
     return msg
-
-def shutdownSocket(soc, code):
-    if code == SHUT_WR:
-        print("Further sends are disallowed on this socket.")
-    elif code == SHUT_RD:
-        print("Further receives are disallowed on this socket.")
-    elif code == SHUT_RDWR:
-        print("Further sends and receives are disallowed on this socket.")
-    else:
-        print("An error occurred while using socket.SHUT()")
-    soc.shutdown(code)
-    return
 
 def buildReqMsg(pathname, port, ip):
     """
@@ -129,43 +123,101 @@ def buildReqMsg(pathname, port, ip):
     return reqMsg
 
 def buildCondGET(pathname, hostname):
+    """
+    Constructs a conditional GET message.
+
+    Parameters:
+    pathname (string): Pathname for the html file. 
+    hostname (string): Hostname where the object resides.
+
+    Returns:
+    msg (string): conditional GET message in string format. 
+    """
     msg = "GET " + pathname + " HTTP/1.1\r\n"
     msg += "Host: " + hostname + "\r\n"
+    # If file exists, then add the 'if-modified-since' header line.
     if os.path.exists(pathname[1:]):
         dayOfWeek, month, day, time, year = acquireFileDate(pathname)
         msg += "If-modified-since: " + dayOfWeek + ", " + day + " " + month + " " + year + " " + time + "\r\n"
     return msg
 
 def acquireDatetime(pathname):
+    """
+    Discovers the date and time associated with the html file (pathname)
+    and converts it to a datetime object.
+    Example of datetime format: 2022-10-06 09:23:18
+
+    Parameters:
+    pathname (string): Pathname for the html file.
+
+    Returns:
+    fileDatetime (datetime): Datetime object in '2022-10-06 09:23:18' format.
+    """
     fileTime = time.ctime(os.path.getmtime(pathname[1:]))
     fileDatetime = datetime.datetime.strptime(fileTime, "%a %b %d %H:%M:%S %Y")
     return fileDatetime
 
 def sendData(soc, data):
+    """
+    Sends data to socket.
+    
+    Parameters:
+    soc (socket): Socket data being sent to.
+    data (array): Data that is sent. 
+    """
     for i in range(0, len(data)):
         soc.send(data[i].encode())
 
 def sendUpdatedFile(pathname, file, soc):
-    print("enter sendUpdatedFile()")
+    """
+    Sends entire response message (status line, header line, and entity body)
+    through the socket connection.
+
+    Parameters:
+    pathname (string): File name
+    file (html object): File object for html file
+    soc (socket): Socket that response message will be sent to. 
+    """
     dayOfWeek, month, day, time, year = acquireFileDate(pathname)
     outputdata = file.readlines()
-    print(outputdata)
+    # status line and header line
     soc.send("HTTP/1.1 200 OK\r\n".encode())
     soc.send( ("Last-modified: " + dayOfWeek + ", " + day + " " + month + " " + year + " " + " " + time + "\r\n").encode() )
     soc.send("\r\n".encode())
+    # entity body
     for i in range(0, len(outputdata)):
         soc.send(outputdata[i].encode())
     soc.send("\r\n".encode())
-    print("exit sendUpdatedFile()")
 
 def acquireFileDate(pathname):
     """
-    [Day of the week, month, day, time, year]
+    Acquires the time and date from the file (pathname)
+    and returns their respetive values individually.
+    
+    Parameters:
+    pathname (string): File name.
+    
+    Returns:
+    data[0] (string): Day of the week
+    data[1] (string): Month
+    data[2] (string): Day
+    data[3] (string): Time
+    data[4] (string): Year
     """
     data = time.ctime(os.path.getmtime(pathname[1:])).split()
     return data[0], data[1], data[2], data[3], data[4]
 
 def convertToDatetime(msg):
+    """
+    Converts a string that holds the date and time to a
+    datetime object in format '2022-10-06 09:23:18'.
+
+    Parameters:
+    msg (string): String message that has date and time.
+
+    Returns:
+    fileDatetime (datetime): Datetime object in '2022-10-06 09:23:18' format.
+    """
     fileTime = msg[6][0:3]
     for i in range(7, len(msg)):
         fileTime = fileTime + " " + msg[i]
