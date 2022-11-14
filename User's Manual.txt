@@ -1,13 +1,19 @@
 User's manual on how to run the progam:
 
-Step 1) Run orgin_server.py first, then proxy_server.py and then client.py.
+Step 1) Run orgin_server.py first, then proxy_server.py, and then client.py (in that order).
 
 Step 2) On the client side of the program, make a request by typing in the name of a file.
+        The name of the file entered must only be the name with no slashes or file type.
+        For example: /HelloWorld.html will be entered as HelloWorld.
+                     /sample-webpage.html will be enterd as sample-webpage.
+        The client handles putting the forward slash and html file type. 
+        If the file name is entered incorrectly, it will genereate status code 404. 
 
-Step 3) Another file can be requested one after the other if needed.
+Step 3) Repeat step 2 to make subsequent file requests. 
 
-Step 3) We then receive a response from the proxy server which we can see on client.py.
+Step 4) Exit the program manually to stopping the program.
 
-Step 4) We can then send another request to the proxy server by repeating step 2.
-
-Step 5) Once we are done with the program, we exit the program manually by stopping the program
+As a note for the client.py file, since the program is multi-threaded as well, a response from the
+proxy_server.py may not be displayed until entering a new pathname. Since Python threading can 
+be unpredictable, there is no way of determining if a request for a new pathname or a response
+from the proxy_server.py will occur. 
