@@ -1,0 +1,13 @@
+User's manual on how to run the progam:
+
+Step 1) Run orgin_server.py first, then proxy_server.py and then client.py.
+
+Step 2) On the client side of the program, make a request by typing in the name of a file.
+
+Step 3) Another file can be requested one after the other if needed.
+
+Step 3) We then receive a response from the proxy server which we can see on client.py.
+
+Step 4) We can then send another request to the proxy server by repeating step 2.
+
+Step 5) Once we are done with the program, we exit the program manually by stopping the program
