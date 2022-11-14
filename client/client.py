@@ -4,6 +4,7 @@ Project: Multi-threaded web proxy server
 Files: client.py, proxy_server.py, origin_server.py, and helper.py
 Date: 11/13/22
 Description: This program incorporates a multi-threaded client program.
+		For testing and demonstration purposes.
 """
 from socket import *
 import sys
