@@ -53,6 +53,9 @@ def originThreading(proxySocket):
         thread_num = threading.current_thread().name.split()[0]
         print(f"\n{thread_num} created:")
         print("Origin server received conditional GET message from proxy server.")
+        #************
+        #time.sleep(5)
+        #************
         THREAD_LOCK.release()
         # parse GET message
         condGetMsg = condGetMsg.split()

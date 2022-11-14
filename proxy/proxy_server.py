@@ -59,6 +59,12 @@ def proxyThreading(clientSocket):
         # Establish TCP connection with origin server
         originSocket = helper.createSocket("origin")
         THREAD_LOCK.release()
+
+        #**************************************
+        print(f"[{thread_num} PROCESSING] ...")
+        time.sleep(3)
+        #**************************************
+        
         # Parse request message
         reqMsg = reqMsg.split()
         hostname = reqMsg[4]
