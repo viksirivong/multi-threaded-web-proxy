@@ -28,9 +28,9 @@ def main():
     helper.bindSocket(originSocket, ORIGIN_PORT)
     # Accept requests from proxy server
     while True:
-        time.sleep(1)
+        time.sleep(0.1)
         THREAD_LOCK.acquire()
-        print("Origin server is ready to receive...")
+        print("\nOrigin server is ready to receive...")
         THREAD_LOCK.release()
         proxySocket, addr = originSocket.accept()
         t = threading.Thread(target=originThreading, args=((proxySocket,)) )
@@ -52,11 +52,16 @@ def originThreading(proxySocket):
         # Find thread number associated with this GET message
         thread_num = threading.current_thread().name.split()[0]
         print(f"\n{thread_num} created:")
-        print("Origin server received conditional GET message from proxy server.")
-        #************
-        #time.sleep(5)
-        #************
+        print("Origin server received conditional GET message from proxy server.")        
         THREAD_LOCK.release()
+
+        #**********************************
+        THREAD_LOCK.acquire()
+        print(f"\n[{thread_num} PROCESSING] ...")
+        THREAD_LOCK.release()
+        time.sleep(1)
+        #*********************************
+        
         # parse GET message
         condGetMsg = condGetMsg.split()
         pathname = condGetMsg[1]        
@@ -104,6 +109,14 @@ def originThreading(proxySocket):
             print("Status code 404 sent.")
             proxySocket.shutdown(SHUT_WR)
             THREAD_LOCK.release()
+
+        #**********************************
+        THREAD_LOCK.acquire()
+        print(f"\n[{thread_num} PROCESSING] ...")
+        THREAD_LOCK.release()
+        time.sleep(1)
+        #*********************************
+        
         THREAD_LOCK.acquire()
         # Close sockets
         print(f"\n{thread_num} resumed:")

@@ -31,9 +31,9 @@ def main():
     helper.bindSocket(proxySocket, PROXY_PORT)
     # Accept requests from client server
     while True:
-        time.sleep(1)
+        #time.sleep(0.1)
         THREAD_LOCK.acquire()
-        print("Proxy server is ready to receive...")
+        print("\nProxy server is ready to receive...")
         THREAD_LOCK.release()
         clientSocket, clientAddr = proxySocket.accept()
         t = threading.Thread(target=proxyThreading, args=((clientSocket, )) )
@@ -61,8 +61,10 @@ def proxyThreading(clientSocket):
         THREAD_LOCK.release()
 
         #**************************************
-        print(f"[{thread_num} PROCESSING] ...")
-        time.sleep(3)
+        THREAD_LOCK.acquire()
+        print(f"\n[{thread_num} PROCESSING] ...")
+        THREAD_LOCK.release()
+        time.sleep(0.5)
         #**************************************
         
         # Parse request message
@@ -89,6 +91,13 @@ def proxyThreading(clientSocket):
         print("Sent conditional GET message to origin server.")
         originSocket.shutdown(SHUT_WR)
         THREAD_LOCK.release()
+
+        #**************************************
+        THREAD_LOCK.acquire()
+        print(f"\n[{thread_num} PROCESSING] ...")
+        THREAD_LOCK.release()
+        time.sleep(1)
+        #**************************************
         
         # Receive response message from origin server
         msg = originSocket.recv(BUFFER_SIZE).decode()
